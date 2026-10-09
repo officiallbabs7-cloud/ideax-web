@@ -75,13 +75,12 @@ export default function Login() {
             />
             Remember me
           </label>
-          <button
-            type="button"
-            onClick={() => toast.info("Password reset is coming soon.")}
+                    <Link
+            to="/forgot-password"
             className="text-sm font-medium text-brand hover:underline"
           >
             Forgot password?
-          </button>
+          </Link>
         </div>
 
         <Button type="submit" loading={isSubmitting} className="w-full cursor-pointer">

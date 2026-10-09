@@ -7,6 +7,8 @@ const KEY = "mock_user";
 const ORDERS_KEY = "mock_orders";
 const PAYMENTS_KEY = "mock_payments";
 const USER_KEY = "ideax_user";
+const PAYREF_KEY = "ideax_payment_refs";
+const PAYING_KEY = "ideax_paying_order";
 
 // Services come from the real backend when the whole app is real,
 // or when VITE_REAL_SERVICES=true (so areas can be connected one at a time)
@@ -16,6 +18,11 @@ const REAL_SERVICES =
 // Sign-up and login use the real backend when the whole app is real,
 // or when VITE_REAL_AUTH=true
 const REAL_AUTH = !USE_MOCK || import.meta.env.VITE_REAL_AUTH === "true";
+
+// Creating requests and paying use the real backend when VITE_REAL_PAYMENTS=true.
+// (Needs real login and real services too.)
+const REAL_ORDERS =
+  !USE_MOCK || import.meta.env.VITE_REAL_PAYMENTS === "true";
 
 // TEAM: confirm these numbers with the backend engineer (Models > category)
 const CATEGORY_NAMES = {
@@ -87,6 +94,13 @@ async function request(path, options = {}) {
     json = {};
   }
 
+  if (res.status === 401 && token && !path.startsWith("/api/Account/")) {
+    throw {
+      message: "Your session has expired. Please log in again.",
+      status: 401,
+    };
+  }
+
   const failed = !res.ok || (json && json.success === false);
   if (failed) {
     const details =
@@ -115,6 +129,10 @@ function readOrders() {
   return readJson(ORDERS_KEY, []);
 }
 
+function saveOrders(list) {
+  localStorage.setItem(ORDERS_KEY, JSON.stringify(list));
+}
+
 function readPayments() {
   return readJson(PAYMENTS_KEY, {});
 }
@@ -131,7 +149,8 @@ function decodeJwt(token) {
 }
 
 const pick = (obj, keys) => {
-  for (const k of keys) if (obj && obj[k]) return obj[k];
+  if (!obj || typeof obj !== "object") return null;
+  for (const k of keys) if (obj[k]) return obj[k];
   return null;
 };
 
@@ -260,7 +279,7 @@ export async function logout() {
   return { success: true };
 }
 
-// ---------- Services ----------
+
 const MOCK_SERVICES = [
   {
     id: "backend-engineering",
@@ -348,12 +367,42 @@ export async function getService(id) {
 
 // ---------- Orders ----------
 export async function createOrder(data) {
-  if (USE_MOCK) {
-    await wait(700);
+  if (REAL_ORDERS) {
     const { service } = await getService(data.serviceId);
 
+    // The backend takes one text field, so the title, deadline and
+    // description are packed into it.
+    const details = [
+      `Title: ${data.title}`,
+      `Preferred deadline: ${data.deadline || "Not specified"}`,
+      "",
+      data.description,
+    ].join("\n");
+
+    const res = await request(`/api/Services/${data.serviceId}/select`, {
+      method: "POST",
+      body: JSON.stringify({ details }),
+    });
+
+    // Temporary: shows what the server sent back
+    console.info("Select response shape:", JSON.stringify(res));
+
+    const d = res.data;
+    const serverId =
+      (typeof d === "string" ? d : null) ||
+      pick(d, ["id", "serviceRequestId", "requestId"]) ||
+      pick(d?.serviceRequest, ["id"]);
+
+    if (!serverId) {
+      throw {
+        message:
+          "Your request was sent, but the server didn't return its id. Please tell the developer.",
+      };
+    }
+
     const order = {
-      id: `ORD-${Date.now()}`,
+      id: String(serverId),
+      serverId: String(serverId),
       serviceId: service.id,
       serviceName: service.name,
       title: data.title,
@@ -363,10 +412,26 @@ export async function createOrder(data) {
       status: "pending_payment",
       createdAt: new Date().toISOString(),
     };
-    localStorage.setItem(ORDERS_KEY, JSON.stringify([order, ...readOrders()]));
+    saveOrders([order, ...readOrders()]);
     return { success: true, order };
   }
-  return request("/orders", { method: "POST", body: JSON.stringify(data) });
+
+  await wait(700);
+  const { service } = await getService(data.serviceId);
+
+  const order = {
+    id: `ORD-${Date.now()}`,
+    serviceId: service.id,
+    serviceName: service.name,
+    title: data.title,
+    description: data.description,
+    deadline: data.deadline || null,
+    price: service.price,
+    status: "pending_payment",
+    createdAt: new Date().toISOString(),
+  };
+  saveOrders([order, ...readOrders()]);
+  return { success: true, order };
 }
 
 export async function getOrder(id) {
@@ -404,7 +469,7 @@ export async function cancelOrder(id) {
         ? { ...o, status: "cancelled", cancelledAt: new Date().toISOString() }
         : o
     );
-    localStorage.setItem(ORDERS_KEY, JSON.stringify(updated));
+    saveOrders(updated);
     return { success: true, order: updated.find((o) => o.id === id) };
   }
 
@@ -420,53 +485,142 @@ export async function deleteOrder(id) {
     if (order.status !== "cancelled") {
       throw { message: "Only cancelled orders can be deleted." };
     }
-    localStorage.setItem(
-      ORDERS_KEY,
-      JSON.stringify(orders.filter((o) => o.id !== id))
-    );
+    saveOrders(orders.filter((o) => o.id !== id));
     return { success: true };
   }
   return request(`/orders/${id}`, { method: "DELETE" });
 }
 
-// ---------- Payments ----------
+
+function normalizePaymentStatus(res) {
+  const d = res?.data;
+  const raw =
+    (typeof d === "string" ? d : null) ??
+    pick(d, ["status", "paymentStatus", "state"]) ??
+    (typeof d === "boolean" ? (d ? "success" : "failed") : null) ??
+    (d && (d.isPaid === true || d.paid === true) ? "success" : null) ??
+    res?.message ??
+    "";
+  const s = String(raw).toLowerCase();
+  if (/success|paid|complete|confirm/.test(s)) return "success";
+  if (/fail|abandon|revers|declin|cancel/.test(s)) return "failed";
+  return "pending";
+}
+
+async function postInitialize(body) {
+  const options = { method: "POST", body: JSON.stringify(body) };
+  try {
+    // His route currently has a typo: "initiatialize"
+    return await request("/api/Payments/initiatialize", options);
+  } catch (err) {
+    if (err?.status === 404) {
+      return request("/api/Payments/initialize", options);
+    }
+    throw err;
+  }
+}
+
 export async function initializePayment(orderId) {
-  if (USE_MOCK) {
-    await wait(600);
+  if (REAL_ORDERS) {
     const order = readOrders().find((o) => o.id === orderId);
     if (!order) throw { message: "Order not found" };
     if (order.status !== "pending_payment") {
       throw { message: "This order has already been paid for." };
     }
+    if (!order.serverId) {
+      throw {
+        message:
+          "This order was created in demo mode and can't be paid for. Please create a new one.",
+      };
+    }
 
-    const reference = `PSK-${Date.now()}`;
-    const payments = readPayments();
-    payments[reference] = { orderId, status: "pending" };
-    localStorage.setItem(PAYMENTS_KEY, JSON.stringify(payments));
+    const res = await postInitialize({
+      serviceRequestId: order.serverId,
+      returnUrl: `${window.location.origin}/payment/callback`,
+    });
 
-    return {
-      success: true,
-      reference,
-      authorizationUrl: `/mock-paystack?reference=${reference}`,
-    };
+    // Temporary: shows what the server sent back
+    console.info("Initialize response shape:", JSON.stringify(res));
+
+    const d = res.data;
+    const authorizationUrl =
+      (typeof d === "string" ? d : null) ||
+      pick(d, [
+        "authorizationUrl",
+        "authorization_url",
+        "paymentUrl",
+        "checkoutUrl",
+        "url",
+        "link",
+      ]);
+    const reference = pick(d, [
+      "reference",
+      "paymentReference",
+      "transactionReference",
+    ]);
+
+    if (!authorizationUrl) {
+      throw {
+        message: "The payment page link wasn't returned. Please try again.",
+      };
+    }
+
+    // Remember which order this payment belongs to
+    localStorage.setItem(PAYING_KEY, order.id);
+    if (reference) {
+      const refs = readJson(PAYREF_KEY, {});
+      refs[reference] = order.id;
+      localStorage.setItem(PAYREF_KEY, JSON.stringify(refs));
+    }
+
+    return { success: true, reference, authorizationUrl };
   }
 
-  return request("/payments/initialize", {
-    method: "POST",
-    body: JSON.stringify({ orderId }),
-  });
+  await wait(600);
+  const order = readOrders().find((o) => o.id === orderId);
+  if (!order) throw { message: "Order not found" };
+  if (order.status !== "pending_payment") {
+    throw { message: "This order has already been paid for." };
+  }
+
+  const reference = `PSK-${Date.now()}`;
+  const payments = readPayments();
+  payments[reference] = { orderId, status: "pending" };
+  localStorage.setItem(PAYMENTS_KEY, JSON.stringify(payments));
+
+  return {
+    success: true,
+    reference,
+    authorizationUrl: `/mock-paystack?reference=${reference}`,
+  };
 }
 
 export async function verifyPayment(reference) {
-  if (USE_MOCK) {
-    await wait(800);
-    const payment = readPayments()[reference];
-    if (!payment) throw { message: "We couldn't find this payment." };
-    const order = readOrders().find((o) => o.id === payment.orderId);
-    return { success: true, status: payment.status, order };
+  if (REAL_ORDERS) {
+    const res = await request(
+      `/api/Payments/verify?reference=${encodeURIComponent(reference)}`
+    );
+
+    // Temporary: shows what the server sent back
+    console.info("Verify response shape:", JSON.stringify(res));
+
+    const status = normalizePaymentStatus(res);
+    const refs = readJson(PAYREF_KEY, {});
+    const orderId = refs[reference] || localStorage.getItem(PAYING_KEY);
+
+    let order = readOrders().find((o) => o.id === orderId) || null;
+    if (order && status === "success" && order.status === "pending_payment") {
+      order = { ...order, status: "paid", paidAt: new Date().toISOString() };
+      saveOrders(readOrders().map((o) => (o.id === order.id ? order : o)));
+    }
+    return { success: true, status, order };
   }
 
-  return request(`/payments/verify/${reference}`);
+  await wait(800);
+  const payment = readPayments()[reference];
+  if (!payment) throw { message: "We couldn't find this payment." };
+  const order = readOrders().find((o) => o.id === payment.orderId);
+  return { success: true, status: payment.status, order };
 }
 
 export function mockGetPaymentDetails(reference) {
@@ -486,16 +640,17 @@ export function mockFinishPayment(reference, outcome) {
   localStorage.setItem(PAYMENTS_KEY, JSON.stringify(payments));
 
   if (outcome === "success") {
-    const orders = readOrders().map((o) =>
-      o.id === payment.orderId
-        ? { ...o, status: "paid", paidAt: new Date().toISOString() }
-        : o
+    saveOrders(
+      readOrders().map((o) =>
+        o.id === payment.orderId
+          ? { ...o, status: "paid", paidAt: new Date().toISOString() }
+          : o
+      )
     );
-    localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
   }
 }
 
-// ---------- Notifications ----------
+
 const READ_KEY = "mock_read_notifications";
 const WELCOME_KEY = "mock_welcome_at";
 
@@ -676,6 +831,8 @@ export async function deleteAccount() {
       TOKEN_KEY,
       ORDERS_KEY,
       PAYMENTS_KEY,
+      PAYREF_KEY,
+      PAYING_KEY,
       PREFS_KEY,
       "mock_read_notifications",
       "mock_welcome_at",
@@ -683,4 +840,39 @@ export async function deleteAccount() {
     return { success: true };
   }
   return request("/auth/account", { method: "DELETE" });
+}
+
+// ---------- Password reset ----------
+// TEMPORARY: simulated until the backend has the reset endpoints.
+// Set VITE_REAL_PASSWORD_RESET=true in .env (and Vercel) when they exist.
+const REAL_RESET = import.meta.env.VITE_REAL_PASSWORD_RESET === "true";
+
+export async function forgotPassword(email) {
+  if (!REAL_RESET) {
+    await wait(700);
+    return { success: true };
+  }
+  return request("/api/Account/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function resetPassword({ email, token, password }) {
+  if (!REAL_RESET) {
+    await wait(700);
+    if (token === "expired") {
+      throw { message: "This reset link has expired. Please request a new one." };
+    }
+    return { success: true };
+  }
+  return request("/api/Account/reset-password", {
+    method: "POST",
+    body: JSON.stringify({
+      email,
+      token,
+      newPassword: password,
+      newPasswordConfirmation: password,
+    }),
+  });
 }

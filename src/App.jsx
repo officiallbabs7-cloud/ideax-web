@@ -16,20 +16,22 @@ import ProtectedRoute from "./routes/ProtectedRoute.jsx";
 import { AuthProvider } from "./hooks/useAuth.jsx";
 import Notifications from "./pages/Notifications.jsx";
 import SettingsPage from "./pages/Settings.jsx";
+import ForgotPassword from "./pages/ForgotPassword.jsx";
+import ResetPassword from "./pages/ResetPassword.jsx";
 
 export default function App() {
   return (
     <AuthProvider>
       <Toaster richColors position="top-center" />
       <Routes>
-        
         <Route path="/" element={<Landing />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
 
-        
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/services" element={<Services />} />
