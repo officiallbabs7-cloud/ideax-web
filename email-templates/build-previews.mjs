@@ -56,16 +56,38 @@ const emails = {
     values: { ...order, MESSAGE: "Our team has started working on your request." },
     button: ["View order", `${APP_URL}/orders/${order.ORDER_ID}`],
   },
+    "reset-password": {
+    heading: "Reset your password",
+    preheader: "Use this link to choose a new password.",
+    body: "reset-password-body.html",
+    values: {
+      RESET_URL: `${APP_URL}/reset-password?token=SAMPLE-TOKEN&email=boluwatife%40example.com`,
+      EXPIRY: "1 hour",
+    },
+    button: null, // this email has its own button inside the body
+  },
+  "password-changed": {
+    heading: "Your password was changed",
+    preheader: "If this wasn't you, reset your password right away.",
+    body: "notice-body.html",
+    values: {
+      MESSAGE:
+        "The password for your IdeaX account was just changed. If this was you, no action is needed. If it wasn't, reset your password right away.",
+    },
+    button: ["Reset my password", `${APP_URL}/forgot-password`],
+  },
 };
 
 mkdirSync(join(dir, "preview"), { recursive: true });
 
 for (const [name, email] of Object.entries(emails)) {
   const body = fill(read(email.body), email.values);
-  const button = fill(read("button.html"), {
-    BUTTON_TEXT: email.button[0],
-    BUTTON_URL: email.button[1],
-  });
+      const button = email.button
+    ? fill(read("button.html"), {
+        BUTTON_TEXT: email.button[0],
+        BUTTON_URL: email.button[1],
+      })
+    : "";
   const html = fill(read("layout.html"), {
     ...common,
     HEADING: email.heading,
