@@ -6,73 +6,261 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const KEY = "mock_user";
 const ORDERS_KEY = "mock_orders";
 const PAYMENTS_KEY = "mock_payments";
+const USER_KEY = "ideax_user";
+
+// Services come from the real backend when the whole app is real,
+// or when VITE_REAL_SERVICES=true (so areas can be connected one at a time)
+const REAL_SERVICES =
+  !USE_MOCK || import.meta.env.VITE_REAL_SERVICES === "true";
+
+// Sign-up and login use the real backend when the whole app is real,
+// or when VITE_REAL_AUTH=true
+const REAL_AUTH = !USE_MOCK || import.meta.env.VITE_REAL_AUTH === "true";
+
+// TEAM: confirm these numbers with the backend engineer (Models > category)
+const CATEGORY_NAMES = {
+  0: "Software Engineering",
+  1: "Product Design",
+  2: "Research and Development",
+  3: "Business Ventures",
+};
+
+function iconFor(name = "") {
+  const n = name.toLowerCase();
+  if (n.includes("front")) return "monitor";
+  if (n.includes("back")) return "server";
+  if (n.includes("mobile")) return "mobile";
+  if (n.includes("thinking") || n.includes("ideation")) return "lightbulb";
+  if (n.includes("ui/ux") || n.includes("ux") || n.includes("design")) return "pen";
+  if (n.includes("manage")) return "clipboard";
+  if (n.includes("startup") || n.includes("venture")) return "rocket";
+  return "code";
+}
+
+function fromApiService(s) {
+  return {
+    id: s.id,
+    name: s.name,
+    description: s.description,
+    category:
+      typeof s.category === "number"
+        ? CATEGORY_NAMES[s.category] || "Other services"
+        : s.category,
+    icon: iconFor(s.name),
+    price: s.price,
+  };
+}
+
+const TOKEN_KEY = "ideax_token";
+export const getToken = () => localStorage.getItem(TOKEN_KEY);
+export const setToken = (token) =>
+  token
+    ? localStorage.setItem(TOKEN_KEY, token)
+    : localStorage.removeItem(TOKEN_KEY);
 
 async function request(path, options = {}) {
-  const res = await fetch(`${API_URL}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    ...options,
-  });
-  const json = await res.json();
-  if (!res.ok) throw json;
+  const token = getToken();
+  let res;
+
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(options.headers || {}),
+      },
+    });
+  } catch (err) {
+    console.error("Network or CORS error:", err);
+    throw {
+      message:
+        "We couldn't reach the server. Check your connection and try again.",
+    };
+  }
+
+  const text = await res.text();
+  let json = {};
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch {
+    json = {};
+  }
+
+  const failed = !res.ok || (json && json.success === false);
+  if (failed) {
+    const details =
+      Array.isArray(json.errors) && json.errors.length
+        ? json.errors.join(" ")
+        : "";
+    throw {
+      message:
+        details || json.message || json.title || `Request failed (${res.status})`,
+      status: res.status,
+    };
+  }
+
   return json;
 }
 
-function readOrders() {
+function readJson(key, fallback = null) {
   try {
-    return JSON.parse(localStorage.getItem(ORDERS_KEY)) || [];
+    return JSON.parse(localStorage.getItem(key)) ?? fallback;
   } catch {
-    return [];
+    return fallback;
   }
+}
+
+function readOrders() {
+  return readJson(ORDERS_KEY, []);
 }
 
 function readPayments() {
+  return readJson(PAYMENTS_KEY, {});
+}
+
+// ---------- Auth helpers (real backend) ----------
+function decodeJwt(token) {
   try {
-    return JSON.parse(localStorage.getItem(PAYMENTS_KEY)) || {};
+    const base64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    return JSON.parse(new TextDecoder().decode(bytes));
   } catch {
-    return {};
+    return null;
   }
 }
 
+const pick = (obj, keys) => {
+  for (const k of keys) if (obj && obj[k]) return obj[k];
+  return null;
+};
 
-export async function signup(data) {
-  if (USE_MOCK) {
-    await wait(600);
-    const user = { id: 1, name: data.name, email: data.email };
-    localStorage.setItem(KEY, JSON.stringify(user));
-    return { success: true, user };
+const CLAIM = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/";
+
+// Works out the token and the user from the server's reply, whatever
+// its exact shape (we only knew the wrapper: success, message, data)
+function extractAuth(res, fallbackEmail, nameHint) {
+  const d = res?.data ?? res ?? {};
+  const token =
+    pick(d, ["token", "accessToken", "access_token", "jwt", "jwtToken"]) ||
+    pick(res, ["token", "accessToken", "access_token"]);
+  const u = d.user || d.profile || d.account || d;
+  const claims = token ? decodeJwt(token) : null;
+
+  let name =
+    pick(u, ["fullName", "fullname", "displayName", "name"]) ||
+    pick(claims, ["fullName", "full_name", "name", `${CLAIM}givenname`, "given_name", "unique_name"]);
+  const email =
+    pick(u, ["email", "userName"]) ||
+    pick(claims, ["email", `${CLAIM}emailaddress`]) ||
+    fallbackEmail;
+
+  if (!name || String(name).includes("@")) {
+    name = nameHint || String(email || "User").split("@")[0];
   }
-  return request("/auth/signup", { method: "POST", body: JSON.stringify(data) });
+
+  const id =
+    pick(u, ["id", "userId"]) ||
+    pick(claims, ["sub", "nameid", `${CLAIM}nameidentifier`]) ||
+    email;
+
+  return { token, user: { id, name, email } };
 }
 
+function clearAuth() {
+  setToken(null);
+  localStorage.removeItem(USER_KEY);
+}
+
+// ---------- Auth ----------
 export async function login(data) {
-  if (USE_MOCK) {
+  if (!REAL_AUTH) {
     await wait(600);
     const user = { id: 1, name: "Test User", email: data.email };
     localStorage.setItem(KEY, JSON.stringify(user));
     return { success: true, user };
   }
-  return request("/auth/login", { method: "POST", body: JSON.stringify(data) });
+
+  const res = await request("/api/Account/login", {
+    method: "POST",
+    body: JSON.stringify({
+      email: data.email,
+      password: data.password,
+      rememberMe: !!data.remember,
+    }),
+  });
+
+  // Temporary: shows the shape of the reply (the token itself is hidden)
+  console.info(
+    "Login response shape:",
+    JSON.stringify(res, (k, v) => (/token/i.test(k) ? "[hidden]" : v))
+  );
+
+  const { token, user } = extractAuth(res, data.email, data.nameHint);
+  if (!token) {
+    console.warn("No token found in the login response.");
+  }
+  setToken(token);
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+  return { success: true, user };
+}
+
+export async function signup(data) {
+  if (!REAL_AUTH) {
+    await wait(600);
+    const user = { id: 1, name: data.name, email: data.email };
+    localStorage.setItem(KEY, JSON.stringify(user));
+    return { success: true, user };
+  }
+
+  await request("/api/Account/register", {
+    method: "POST",
+    body: JSON.stringify({
+      fullName: data.name,
+      email: data.email,
+      password: data.password,
+      passwordConfirmation: data.password,
+    }),
+  });
+
+  // The register endpoint doesn't return a session, so sign the user in
+  return login({
+    email: data.email,
+    password: data.password,
+    remember: true,
+    nameHint: data.name,
+  });
 }
 
 export async function getMe() {
-  if (USE_MOCK) {
+  if (!REAL_AUTH) {
     const user = JSON.parse(localStorage.getItem(KEY));
     if (!user) throw { message: "Not logged in" };
     return { success: true, user };
   }
-  return request("/auth/me");
+
+  const user = readJson(USER_KEY);
+  if (!user) throw { message: "Not logged in" };
+
+  const token = getToken();
+  const claims = token ? decodeJwt(token) : null;
+  if (claims?.exp && claims.exp * 1000 < Date.now()) {
+    clearAuth();
+    throw { message: "Your session has expired. Please log in again." };
+  }
+  return { success: true, user };
 }
 
 export async function logout() {
-  if (USE_MOCK) {
+  if (!REAL_AUTH) {
     localStorage.removeItem(KEY);
     return { success: true };
   }
-  return request("/auth/logout", { method: "POST" });
+  clearAuth();
+  return { success: true };
 }
 
-
+// ---------- Services ----------
 const MOCK_SERVICES = [
   {
     id: "backend-engineering",
@@ -140,28 +328,29 @@ const MOCK_SERVICES = [
 ];
 
 export async function getServices() {
-  if (USE_MOCK) {
-    await wait(500);
-    return { success: true, services: MOCK_SERVICES };
+  if (REAL_SERVICES) {
+    const res = await request("/api/Services");
+    const services = (res.data || [])
+      .filter((s) => s.isActive !== false)
+      .map(fromApiService);
+    return { success: true, services };
   }
-  return request("/services");
+  await wait(500);
+  return { success: true, services: MOCK_SERVICES };
 }
 
 export async function getService(id) {
-  if (USE_MOCK) {
-    await wait(300);
-    const service = MOCK_SERVICES.find((s) => s.id === id);
-    if (!service) throw { message: "Service not found" };
-    return { success: true, service };
-  }
-  return request(`/services/${id}`);
+  const { services } = await getServices();
+  const service = services.find((s) => s.id === id);
+  if (!service) throw { message: "Service not found" };
+  return { success: true, service };
 }
 
+// ---------- Orders ----------
 export async function createOrder(data) {
   if (USE_MOCK) {
     await wait(700);
-    const service = MOCK_SERVICES.find((s) => s.id === data.serviceId);
-    if (!service) throw { message: "Service not found" };
+    const { service } = await getService(data.serviceId);
 
     const order = {
       id: `ORD-${Date.now()}`,
@@ -195,7 +384,7 @@ export async function getOrders() {
     await wait(400);
     return { success: true, orders: readOrders() };
   }
-  
+
   return request("/orders");
 }
 
@@ -218,7 +407,7 @@ export async function cancelOrder(id) {
     localStorage.setItem(ORDERS_KEY, JSON.stringify(updated));
     return { success: true, order: updated.find((o) => o.id === id) };
   }
-  
+
   return request(`/orders/${id}/cancel`, { method: "PATCH" });
 }
 
@@ -240,7 +429,7 @@ export async function deleteOrder(id) {
   return request(`/orders/${id}`, { method: "DELETE" });
 }
 
-
+// ---------- Payments ----------
 export async function initializePayment(orderId) {
   if (USE_MOCK) {
     await wait(600);
@@ -261,7 +450,7 @@ export async function initializePayment(orderId) {
       authorizationUrl: `/mock-paystack?reference=${reference}`,
     };
   }
-  
+
   return request("/payments/initialize", {
     method: "POST",
     body: JSON.stringify({ orderId }),
@@ -276,10 +465,9 @@ export async function verifyPayment(reference) {
     const order = readOrders().find((o) => o.id === payment.orderId);
     return { success: true, status: payment.status, order };
   }
-  
+
   return request(`/payments/verify/${reference}`);
 }
-
 
 export function mockGetPaymentDetails(reference) {
   const payment = readPayments()[reference];
@@ -307,16 +495,12 @@ export function mockFinishPayment(reference, outcome) {
   }
 }
 
-
+// ---------- Notifications ----------
 const READ_KEY = "mock_read_notifications";
 const WELCOME_KEY = "mock_welcome_at";
 
 function readReadIds() {
-  try {
-    return JSON.parse(localStorage.getItem(READ_KEY)) || [];
-  } catch {
-    return [];
-  }
+  return readJson(READ_KEY, []);
 }
 
 function buildMockNotifications() {
@@ -400,7 +584,7 @@ export async function getNotifications() {
     await wait(300);
     return { success: true, notifications: buildMockNotifications() };
   }
-  
+
   return request("/notifications");
 }
 
@@ -424,7 +608,7 @@ export async function markAllNotificationsRead() {
   return request("/notifications/read-all", { method: "PATCH" });
 }
 
-
+// ---------- Settings ----------
 const PREFS_KEY = "mock_email_prefs";
 const DEFAULT_PREFS = {
   orderUpdates: true,
@@ -434,13 +618,14 @@ const DEFAULT_PREFS = {
 export async function updateProfile(data) {
   if (USE_MOCK) {
     await wait(500);
-    const current = JSON.parse(localStorage.getItem(KEY));
+    const userKey = REAL_AUTH ? USER_KEY : KEY;
+    const current = readJson(userKey);
     if (!current) throw { message: "Not logged in" };
     const user = { ...current, name: data.name, email: data.email };
-    localStorage.setItem(KEY, JSON.stringify(user));
+    localStorage.setItem(userKey, JSON.stringify(user));
     return { success: true, user };
   }
-  
+
   return request("/auth/profile", {
     method: "PATCH",
     body: JSON.stringify(data),
@@ -450,10 +635,10 @@ export async function updateProfile(data) {
 export async function changePassword(data) {
   if (USE_MOCK) {
     await wait(600);
-    
+
     return { success: true };
   }
-  
+
   return request("/auth/password", {
     method: "PATCH",
     body: JSON.stringify(data),
@@ -463,15 +648,10 @@ export async function changePassword(data) {
 export async function getEmailPreferences() {
   if (USE_MOCK) {
     await wait(200);
-    let saved = {};
-    try {
-      saved = JSON.parse(localStorage.getItem(PREFS_KEY)) || {};
-    } catch {
-      saved = {};
-    }
+    const saved = readJson(PREFS_KEY, {});
     return { success: true, preferences: { ...DEFAULT_PREFS, ...saved } };
   }
-  
+
   return request("/settings/email-preferences");
 }
 
@@ -492,6 +672,8 @@ export async function deleteAccount() {
     await wait(600);
     [
       KEY,
+      USER_KEY,
+      TOKEN_KEY,
       ORDERS_KEY,
       PAYMENTS_KEY,
       PREFS_KEY,

@@ -14,7 +14,12 @@ const schema = z
   .object({
     name: z.string().min(2, "Enter your full name"),
     email: z.string().email("Enter a valid email address"),
-    password: z.string().min(8, "Password must be at least 8 characters"),
+        password: z
+      .string()
+      .min(8, "Password must be at least 8 characters")
+      .regex(/[a-z]/, "Add a lowercase letter")
+      .regex(/[A-Z]/, "Add an uppercase letter")
+      .regex(/[0-9]/, "Add a number"),
     confirm: z.string().min(1, "Confirm your password"),
     agree: z
       .boolean()
@@ -85,7 +90,7 @@ export default function Signup() {
         <PasswordInput
           label="Password*"
           placeholder="Create a password"
-          hint="Password must be at least 8 characters long"
+          hint="At least 8 characters, with an uppercase letter, a lowercase letter and a number"
           {...register("password")}
           error={errors.password?.message}
         />
