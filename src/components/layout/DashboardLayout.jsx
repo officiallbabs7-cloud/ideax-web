@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getNotifications } from "../../lib/api.js";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -23,10 +24,9 @@ const nav = [
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
-function SidebarContent({ onNavigate }) {
+function SidebarContent({ onNavigate, unread = 0 }) {
   return (
     <div className="flex h-full flex-col">
-      
       <Link
         to="/dashboard"
         onClick={onNavigate}
@@ -49,8 +49,21 @@ function SidebarContent({ onNavigate }) {
               }`
             }
           >
-            <Icon size={18} />
-            {label}
+            {({ isActive }) => (
+              <>
+                <Icon size={18} />
+                {label}
+                {to === "/notifications" && unread > 0 && (
+                  <span
+                    className={`ml-auto rounded-full px-2 py-0.5 text-xs font-bold ${
+                      isActive ? "bg-white text-brand" : "bg-brand text-white"
+                    }`}
+                  >
+                    {unread}
+                  </span>
+                )}
+              </>
+            )}
           </NavLink>
         ))}
       </nav>
@@ -72,6 +85,24 @@ export default function DashboardLayout({ children }) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+    const [unread, setUnread] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () =>
+      getNotifications()
+        .then((res) => {
+          if (!cancelled)
+            setUnread(res.notifications.filter((n) => !n.read).length);
+        })
+        .catch(() => {});
+    load();
+    window.addEventListener("notifications-updated", load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("notifications-updated", load);
+    };
+  }, []);
   const initial = user?.name?.charAt(0)?.toUpperCase() || "U";
 
   const onSearch = (e) => {
@@ -82,12 +113,10 @@ export default function DashboardLayout({ children }) {
 
   return (
     <div className="min-h-screen bg-[#F6F4FD]">
-      
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 bg-[#1E1245] lg:block">
-        <SidebarContent />
+        <SidebarContent unread={unread} />
       </aside>
 
-      
       {open && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div
@@ -102,13 +131,12 @@ export default function DashboardLayout({ children }) {
             >
               <X size={20} />
             </button>
-            <SidebarContent onNavigate={() => setOpen(false)} />
+            <SidebarContent unread={unread} onNavigate={() => setOpen(false)} />
           </aside>
         </div>
       )}
 
       <div className="lg:pl-60">
-        
         <header className="sticky top-0 z-20 flex h-20 items-center gap-3 border-b border-gray-100 bg-white px-4 md:px-8">
           <button
             aria-label="Open menu"

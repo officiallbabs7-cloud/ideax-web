@@ -8,13 +8,14 @@ import Privacy from "./pages/Privacy.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Services from "./pages/Services.jsx";
 import Orders from "./pages/Orders.jsx";
-import ComingSoon from "./pages/ComingSoon.jsx";
 import ServiceDetail from "./pages/ServiceDetail.jsx";
 import OrderSummary from "./pages/OrderSummary.jsx";
 import PaymentCallback from "./pages/PaymentCallback.jsx";
 import MockPaystack from "./pages/MockPaystack.jsx";
 import ProtectedRoute from "./routes/ProtectedRoute.jsx";
 import { AuthProvider } from "./hooks/useAuth.jsx";
+import Notifications from "./pages/Notifications.jsx";
+import SettingsPage from "./pages/Settings.jsx";
 
 export default function App() {
   return (
@@ -37,8 +38,8 @@ export default function App() {
           <Route path="/orders/:id" element={<OrderSummary />} />
           <Route path="/payment/callback" element={<PaymentCallback />} />
           <Route path="/mock-paystack" element={<MockPaystack />} />
-          <Route path="/notifications" element={<ComingSoon title="Notifications" />} />
-          <Route path="/settings" element={<ComingSoon title="Settings" />} />
+          <Route path="/notifications" element={<Notifications />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Routes>
     </AuthProvider>

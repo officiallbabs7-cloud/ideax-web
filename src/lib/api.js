@@ -72,9 +72,7 @@ export async function logout() {
   return request("/auth/logout", { method: "POST" });
 }
 
-// ---------- Services ----------
-// TEMPORARY: placeholder prices. Confirm the real fixed prices with your supervisor.
-// The backend will provide this list from GET /services
+
 const MOCK_SERVICES = [
   {
     id: "backend-engineering",
@@ -159,8 +157,6 @@ export async function getService(id) {
   return request(`/services/${id}`);
 }
 
-// ---------- Orders ----------
-// TEMPORARY: orders are saved in this browser only.
 export async function createOrder(data) {
   if (USE_MOCK) {
     await wait(700);
@@ -199,7 +195,7 @@ export async function getOrders() {
     await wait(400);
     return { success: true, orders: readOrders() };
   }
-  // Real backend should return { orders: [...] } for the logged-in user
+  
   return request("/orders");
 }
 
@@ -222,7 +218,7 @@ export async function cancelOrder(id) {
     localStorage.setItem(ORDERS_KEY, JSON.stringify(updated));
     return { success: true, order: updated.find((o) => o.id === id) };
   }
-  // Real backend should return { order } with status "cancelled"
+  
   return request(`/orders/${id}/cancel`, { method: "PATCH" });
 }
 
@@ -244,8 +240,7 @@ export async function deleteOrder(id) {
   return request(`/orders/${id}`, { method: "DELETE" });
 }
 
-// ---------- Payments ----------
-// TEMPORARY: a fake Paystack so we can test before the backend is ready.
+
 export async function initializePayment(orderId) {
   if (USE_MOCK) {
     await wait(600);
@@ -266,7 +261,7 @@ export async function initializePayment(orderId) {
       authorizationUrl: `/mock-paystack?reference=${reference}`,
     };
   }
-  // Real backend should return { authorizationUrl, reference }
+  
   return request("/payments/initialize", {
     method: "POST",
     body: JSON.stringify({ orderId }),
@@ -281,7 +276,7 @@ export async function verifyPayment(reference) {
     const order = readOrders().find((o) => o.id === payment.orderId);
     return { success: true, status: payment.status, order };
   }
-  // Real backend should return { status: "success" | "failed" | "pending", order }
+  
   return request(`/payments/verify/${reference}`);
 }
 
@@ -310,4 +305,200 @@ export function mockFinishPayment(reference, outcome) {
     );
     localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
   }
+}
+
+
+const READ_KEY = "mock_read_notifications";
+const WELCOME_KEY = "mock_welcome_at";
+
+function readReadIds() {
+  try {
+    return JSON.parse(localStorage.getItem(READ_KEY)) || [];
+  } catch {
+    return [];
+  }
+}
+
+function buildMockNotifications() {
+  const readIds = readReadIds();
+  const list = [];
+
+  readOrders().forEach((o) => {
+    list.push({
+      id: `${o.id}:created`,
+      type: "order",
+      title: "Request submitted",
+      message: `Your request "${o.title}" is saved.${
+        o.status === "pending_payment" ? " Pay now to start work." : ""
+      }`,
+      orderId: o.id,
+      createdAt: o.createdAt,
+    });
+
+    if (o.paidAt) {
+      list.push({
+        id: `${o.id}:paid`,
+        type: "payment",
+        title: "Payment confirmed",
+        message: `We received your payment of ₦${o.price.toLocaleString()} for ${o.serviceName}. Work on your request has been scheduled.`,
+        orderId: o.id,
+        createdAt: o.paidAt,
+      });
+    }
+
+    if (o.cancelledAt) {
+      list.push({
+        id: `${o.id}:cancelled`,
+        type: "order",
+        title: "Order cancelled",
+        message: `Your order "${o.title}" was cancelled and you were not charged.`,
+        orderId: o.id,
+        createdAt: o.cancelledAt,
+      });
+    }
+
+    if (o.deadline && !["completed", "cancelled"].includes(o.status)) {
+      const days = Math.ceil(
+        (new Date(`${o.deadline}T12:00:00`) - Date.now()) / 86400000
+      );
+      if (days >= 0 && days <= 3) {
+        list.push({
+          id: `${o.id}:deadline`,
+          type: "deadline",
+          title: "Deadline coming up",
+          message: `"${o.title}" is due ${
+            days === 0 ? "today" : `in ${days} day${days === 1 ? "" : "s"}`
+          }.`,
+          orderId: o.id,
+          createdAt: new Date().toISOString(),
+        });
+      }
+    }
+  });
+
+  let welcomeAt = localStorage.getItem(WELCOME_KEY);
+  if (!welcomeAt) {
+    welcomeAt = new Date().toISOString();
+    localStorage.setItem(WELCOME_KEY, welcomeAt);
+  }
+  list.push({
+    id: "welcome",
+    type: "account",
+    title: "Welcome to IdeaX",
+    message: "Your account is ready. Browse services and request your first one.",
+    orderId: null,
+    createdAt: welcomeAt,
+  });
+
+  return list
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .map((n) => ({ ...n, read: readIds.includes(n.id) }));
+}
+
+export async function getNotifications() {
+  if (USE_MOCK) {
+    await wait(300);
+    return { success: true, notifications: buildMockNotifications() };
+  }
+  
+  return request("/notifications");
+}
+
+export async function markNotificationRead(id) {
+  if (USE_MOCK) {
+    const ids = readReadIds();
+    if (!ids.includes(id)) {
+      localStorage.setItem(READ_KEY, JSON.stringify([...ids, id]));
+    }
+    return { success: true };
+  }
+  return request(`/notifications/${id}/read`, { method: "PATCH" });
+}
+
+export async function markAllNotificationsRead() {
+  if (USE_MOCK) {
+    const all = buildMockNotifications().map((n) => n.id);
+    localStorage.setItem(READ_KEY, JSON.stringify(all));
+    return { success: true };
+  }
+  return request("/notifications/read-all", { method: "PATCH" });
+}
+
+
+const PREFS_KEY = "mock_email_prefs";
+const DEFAULT_PREFS = {
+  orderUpdates: true,
+  deadlineReminders: true,
+};
+
+export async function updateProfile(data) {
+  if (USE_MOCK) {
+    await wait(500);
+    const current = JSON.parse(localStorage.getItem(KEY));
+    if (!current) throw { message: "Not logged in" };
+    const user = { ...current, name: data.name, email: data.email };
+    localStorage.setItem(KEY, JSON.stringify(user));
+    return { success: true, user };
+  }
+  
+  return request("/auth/profile", {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function changePassword(data) {
+  if (USE_MOCK) {
+    await wait(600);
+    
+    return { success: true };
+  }
+  
+  return request("/auth/password", {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getEmailPreferences() {
+  if (USE_MOCK) {
+    await wait(200);
+    let saved = {};
+    try {
+      saved = JSON.parse(localStorage.getItem(PREFS_KEY)) || {};
+    } catch {
+      saved = {};
+    }
+    return { success: true, preferences: { ...DEFAULT_PREFS, ...saved } };
+  }
+  
+  return request("/settings/email-preferences");
+}
+
+export async function updateEmailPreferences(preferences) {
+  if (USE_MOCK) {
+    await wait(300);
+    localStorage.setItem(PREFS_KEY, JSON.stringify(preferences));
+    return { success: true, preferences };
+  }
+  return request("/settings/email-preferences", {
+    method: "PATCH",
+    body: JSON.stringify(preferences),
+  });
+}
+
+export async function deleteAccount() {
+  if (USE_MOCK) {
+    await wait(600);
+    [
+      KEY,
+      ORDERS_KEY,
+      PAYMENTS_KEY,
+      PREFS_KEY,
+      "mock_read_notifications",
+      "mock_welcome_at",
+    ].forEach((k) => localStorage.removeItem(k));
+    return { success: true };
+  }
+  return request("/auth/account", { method: "DELETE" });
 }

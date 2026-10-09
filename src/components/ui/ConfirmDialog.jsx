@@ -7,6 +7,8 @@ export default function ConfirmDialog({
   confirmText = "Confirm",
   cancelText = "Cancel",
   loading = false,
+  confirmDisabled = false,
+  children,
   onConfirm,
   onCancel,
 }) {
@@ -37,6 +39,7 @@ export default function ConfirmDialog({
           {title}
         </h2>
         <p className="mt-2 text-gray-600">{message}</p>
+        {children}
         <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           <button
             onClick={onCancel}
@@ -47,8 +50,8 @@ export default function ConfirmDialog({
           </button>
           <button
             onClick={onConfirm}
-            disabled={loading}
-            className="rounded-lg bg-red-600 px-5 py-3 font-medium text-white hover:bg-red-700 disabled:opacity-60"
+            disabled={loading || confirmDisabled}
+            className="rounded-lg bg-red-600 px-5 py-3 font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? "Please wait..." : confirmText}
           </button>
