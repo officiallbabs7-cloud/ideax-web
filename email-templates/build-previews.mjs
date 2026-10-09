@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -9,10 +9,22 @@ const fill = (html, values) =>
     key in values ? values[key] : match
   );
 
+// The logo is embedded in the preview so it shows in any browser.
+// (Real emails use the hosted address: APP_URL + "/logo-email.png")
+const logoPath = join(dir, "..", "public", "logo-email.png");
+let LOGO_URL = "";
+if (existsSync(logoPath)) {
+  const png = readFileSync(logoPath);
+  console.log(`Logo found: ${png.length} bytes`);
+  LOGO_URL = `data:image/png;base64,${png.toString("base64")}`;
+} else {
+  console.warn(`Logo NOT found at ${logoPath}`);
+}
+
 const APP_URL = "https://ideax-web-kohl.vercel.app";
 const common = {
   APP_URL,
-  LOGO_URL: "../../public/logo-email.png", // local preview only
+  LOGO_URL,
   SUPPORT_EMAIL: "support@yourdomain.com",
 };
 
@@ -56,7 +68,7 @@ const emails = {
     values: { ...order, MESSAGE: "Our team has started working on your request." },
     button: ["View order", `${APP_URL}/orders/${order.ORDER_ID}`],
   },
-    "reset-password": {
+  "reset-password": {
     heading: "Reset your password",
     preheader: "Use this link to choose a new password.",
     body: "reset-password-body.html",
@@ -82,7 +94,7 @@ mkdirSync(join(dir, "preview"), { recursive: true });
 
 for (const [name, email] of Object.entries(emails)) {
   const body = fill(read(email.body), email.values);
-      const button = email.button
+  const button = email.button
     ? fill(read("button.html"), {
         BUTTON_TEXT: email.button[0],
         BUTTON_URL: email.button[1],
