@@ -10,21 +10,18 @@ const USER_KEY = "ideax_user";
 const PAYREF_KEY = "ideax_payment_refs";
 const PAYING_KEY = "ideax_paying_order";
 
-// Services come from the real backend when the whole app is real,
-// or when VITE_REAL_SERVICES=true (so areas can be connected one at a time)
+
 const REAL_SERVICES =
   !USE_MOCK || import.meta.env.VITE_REAL_SERVICES === "true";
 
-// Sign-up and login use the real backend when the whole app is real,
-// or when VITE_REAL_AUTH=true
+
 const REAL_AUTH = !USE_MOCK || import.meta.env.VITE_REAL_AUTH === "true";
 
-// Creating requests and paying use the real backend when VITE_REAL_PAYMENTS=true.
-// (Needs real login and real services too.)
+
 const REAL_ORDERS =
   !USE_MOCK || import.meta.env.VITE_REAL_PAYMENTS === "true";
 
-// TEAM: confirm these numbers with the backend engineer (Models > category)
+
 const CATEGORY_NAMES = {
   0: "Software Engineering",
   1: "Product Design",
