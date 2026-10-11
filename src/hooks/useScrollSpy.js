@@ -14,7 +14,7 @@ export default function useScrollSpy(ids, offset = 120) {
         }
       }
 
-      // If we've scrolled to the very bottom, highlight the last link
+      
       const atBottom =
         window.scrollY > 0 &&
         window.innerHeight + window.scrollY >=

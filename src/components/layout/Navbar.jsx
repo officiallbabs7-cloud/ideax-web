@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Menu, X, Search } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import logo from "../../assets/logo.svg";
 import useScrollSpy from "../../hooks/useScrollSpy.js";
 
@@ -45,11 +45,9 @@ export default function Navbar() {
           </ul>
         </div>
 
-        {/* Desktop actions */}
+        
         <div className="hidden md:flex items-center gap-4">
-          <button aria-label="Search" className="p-2 hover:text-brand">
-            <Search size={20} />
-          </button>
+          
           <Link
             to="/login"
             className="px-4 py-2 text-sm font-medium rounded-lg border border-brand text-brand hover:bg-gray-50"
