@@ -1,4 +1,4 @@
-   const API_URL = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
+const API_URL = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK !== "false";
 
@@ -20,6 +20,8 @@ const REAL_AUTH = !USE_MOCK || import.meta.env.VITE_REAL_AUTH === "true";
 
 const REAL_ORDERS =
   !USE_MOCK || import.meta.env.VITE_REAL_PAYMENTS === "true";
+
+const REAL_SETTINGS = import.meta.env.VITE_REAL_SETTINGS === "true";
 
 
 const CATEGORY_NAMES = {
@@ -134,7 +136,7 @@ function readPayments() {
   return readJson(PAYMENTS_KEY, {});
 }
 
-// ---------- Auth helpers (real backend) ----------
+
 function decodeJwt(token) {
   try {
     const base64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
@@ -785,9 +787,15 @@ export async function updateProfile(data) {
 }
 
 export async function changePassword(data) {
+  // Not on the real backend yet, so don't pretend it worked
+  if (REAL_AUTH && !REAL_SETTINGS) {
+    throw {
+      message: "Changing your password isn't available yet. It's coming soon.",
+    };
+  }
+
   if (USE_MOCK) {
     await wait(600);
-
     return { success: true };
   }
 
@@ -818,8 +826,15 @@ export async function updateEmailPreferences(preferences) {
     body: JSON.stringify(preferences),
   });
 }
-
 export async function deleteAccount() {
+  // Not on the real backend yet, so don't pretend it worked
+  if (REAL_AUTH && !REAL_SETTINGS) {
+    throw {
+      message:
+        "Deleting your account isn't available yet. Please contact support.",
+    };
+  }
+
   if (USE_MOCK) {
     await wait(600);
     [
