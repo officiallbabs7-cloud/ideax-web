@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL;
+   const API_URL = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK !== "false";
 
