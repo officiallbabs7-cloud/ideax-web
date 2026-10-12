@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
 import Landing from "./pages/Landing.jsx";
 import Signup from "./pages/Signup.jsx";
@@ -18,6 +18,15 @@ import Notifications from "./pages/Notifications.jsx";
 import SettingsPage from "./pages/Settings.jsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
+import NotFound from "./pages/NotFound.jsx";
+
+// TEMPORARY: the backend currently sends users back to /YOUR_ROUTE after paying.
+// This forwards them to the real payment result page and keeps the reference.
+// Remove it once the backend uses /payment/callback.
+function PaymentRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={`/payment/callback${search}`} replace />;
+}
 
 export default function App() {
   return (
@@ -32,6 +41,7 @@ export default function App() {
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
 
+        <Route path="/YOUR_ROUTE" element={<PaymentRedirect />} />
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/services" element={<Services />} />
@@ -43,6 +53,7 @@ export default function App() {
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </AuthProvider>
   );
