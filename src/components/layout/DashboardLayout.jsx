@@ -178,7 +178,7 @@ export default function DashboardLayout({ children }) {
               onClick={logout}
               aria-label="Log out"
               title="Log out"
-              className="rounded-lg border border-gray-200 p-2 hover:border-brand hover:text-brand"
+              className="rounded-lg border cursor-pointer border-gray-200 p-2 hover:border-brand hover:text-brand"
             >
               <LogOut size={18} />
             </button>
