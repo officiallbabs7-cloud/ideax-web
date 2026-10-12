@@ -27,6 +27,34 @@ const schema = z.object({
 });
 
 export default function ServiceDetail() {
+  const PLACEHOLDERS = {
+    "Software Engineering": {
+      title: "e.g. Online store for my fashion brand",
+      description:
+        "What do you want built? Who is it for? Any features, examples or links you have in mind?",
+    },
+    "Product Design": {
+      title: "e.g. App screens for a food delivery startup",
+      description:
+        "What do you need designed (a few screens, a full app, a redesign)? Who will use it? Share any brand colours or designs you like.",
+    },
+    "Research and Development": {
+      title: "e.g. Test my idea for a student tutoring app",
+      description:
+        "What idea do you want to explore? What problem does it solve, and what do you already know about the people it's for?",
+    },
+    "Business Ventures": {
+      title: "e.g. Launch plan for my tailoring business",
+      description:
+        "Tell us about your product or business, where it is now, and what you want help with (roadmap, priorities, launch, growth).",
+    },
+  };
+
+  const DEFAULT_PLACEHOLDERS = {
+    title: "e.g. Help with my project",
+    description:
+      "Tell us what you need, who it's for, and anything that would help us get started.",
+  };
   const { id } = useParams();
   const navigate = useNavigate();
   const [service, setService] = useState(null);
@@ -49,7 +77,8 @@ export default function ServiceDetail() {
         if (!cancelled) setService(res.service);
       })
       .catch((err) => {
-        if (!cancelled) setError(err?.message || "Could not load this service.");
+        if (!cancelled)
+          setError(err?.message || "Could not load this service.");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -59,6 +88,8 @@ export default function ServiceDetail() {
       cancelled = true;
     };
   }, [id]);
+
+    const hints = PLACEHOLDERS[service?.category] || DEFAULT_PLACEHOLDERS;
 
   const onSubmit = async (data) => {
     try {
@@ -104,7 +135,6 @@ export default function ServiceDetail() {
 
         {!loading && !error && service && (
           <div className="mt-6 grid gap-6 lg:grid-cols-5">
-            
             <aside className="h-fit rounded-2xl border border-gray-200 bg-white p-6 lg:col-span-2">
               <p className="text-sm font-semibold uppercase text-brand">
                 {service.category}
@@ -125,7 +155,6 @@ export default function ServiceDetail() {
               </p>
             </aside>
 
-            
             <section className="rounded-2xl border border-gray-200 bg-white p-6 md:p-8 lg:col-span-3">
               <h2 className="text-xl font-bold">Tell us what you need</h2>
               <p className="mt-1 text-sm text-gray-500">
@@ -138,13 +167,13 @@ export default function ServiceDetail() {
               >
                 <Input
                   label="Request title*"
-                  placeholder="e.g. Website for my bakery"
+                  placeholder={hints.title}
                   {...register("title")}
                   error={errors.title?.message}
                 />
                 <Textarea
                   label="Describe your request*"
-                  placeholder="What do you want built or designed? Who is it for? Any examples or features you have in mind?"
+                  placeholder={hints.description}
                   {...register("description")}
                   error={errors.description?.message}
                 />
