@@ -43,15 +43,28 @@ function iconFor(name = "") {
   return "code";
 }
 
+// Works out a service's category from its NAME, so the page doesn't depend on
+// the backend's category numbers. Falls back to the number, then "Other services".
+function categoryFor(s) {
+  const n = String(s.name || "").toLowerCase();
+
+  if (/thinking|ideation|research/.test(n)) return "Research and Development";
+  if (/startup|venture|manage|business/.test(n)) return "Business Ventures";
+  if (/\bui\b|\bux\b|ui\/ux|design/.test(n)) return "Product Design";
+  if (/front|back|mobile|software|engineer|web/.test(n)) return "Software Engineering";
+
+  if (typeof s.category === "number") {
+    return CATEGORY_NAMES[s.category] || "Other services";
+  }
+  return s.category || "Other services";
+}
+
 function fromApiService(s) {
   return {
     id: s.id,
     name: s.name,
     description: s.description,
-    category:
-      typeof s.category === "number"
-        ? CATEGORY_NAMES[s.category] || "Other services"
-        : s.category,
+    category: categoryFor(s),
     icon: iconFor(s.name),
     price: s.price,
   };
