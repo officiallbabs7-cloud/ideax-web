@@ -532,6 +532,42 @@ async function postInitialize(body) {
   }
 }
 
+const PAYURL_PREFIX = "ideax_pay_url:";
+
+// His server refuses to start a second payment for the same request.
+// First check whether the saved payment actually went through. If not,
+// reopen the Paystack link we saved the first time.
+async function recoverPayment(order) {
+  const refs = readJson(PAYREF_KEY, {});
+  const savedRef = Object.keys(refs).find((r) => refs[r] === order.id);
+
+  if (savedRef) {
+    try {
+      const check = await verifyPayment(savedRef);
+      if (check.status === "success") {
+        return {
+          success: true,
+          reference: savedRef,
+          authorizationUrl: `/payment/callback?reference=${encodeURIComponent(savedRef)}`,
+        };
+      }
+    } catch {
+      // keep going
+    }
+  }
+
+  const savedUrl = localStorage.getItem(PAYURL_PREFIX + order.id);
+  if (savedUrl) {
+    localStorage.setItem(PAYING_KEY, order.id);
+    return { success: true, reference: savedRef, authorizationUrl: savedUrl };
+  }
+
+  throw {
+    message:
+      "A payment for this order was already started. If you've already paid, wait a minute and refresh. Otherwise please contact support.",
+  };
+}
+
 export async function initializePayment(orderId) {
   if (REAL_ORDERS) {
     const order = readOrders().find((o) => o.id === orderId);
@@ -546,10 +582,18 @@ export async function initializePayment(orderId) {
       };
     }
 
-    const res = await postInitialize({
-      serviceRequestId: order.serverId,
-      returnUrl: `${window.location.origin}/payment/callback`,
-    });
+    let res;
+    try {
+      res = await postInitialize({
+        serviceRequestId: order.serverId,
+        returnUrl: `${window.location.origin}/payment/callback`,
+      });
+    } catch (err) {
+      if (/already/i.test(err?.message || "")) {
+        return recoverPayment(order);
+      }
+      throw err;
+    }
 
     // Temporary: shows what the server sent back
     console.info("Initialize response shape:", JSON.stringify(res));
@@ -577,8 +621,9 @@ export async function initializePayment(orderId) {
       };
     }
 
-    // Remember which order this payment belongs to
+    // Remember which order this payment belongs to, and its Paystack link
     localStorage.setItem(PAYING_KEY, order.id);
+    localStorage.setItem(PAYURL_PREFIX + order.id, authorizationUrl);
     if (reference) {
       const refs = readJson(PAYREF_KEY, {});
       refs[reference] = order.id;
