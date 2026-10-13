@@ -137,12 +137,24 @@ function readJson(key, fallback = null) {
   }
 }
 
+// Orders are kept in this browser until the backend has a "my requests" endpoint.
+// Each account gets its own list, so one person never sees another person's orders.
+function currentUserKey() {
+  const u = readJson(REAL_AUTH ? USER_KEY : KEY);
+  return String(u?.email || u?.id || "guest").toLowerCase();
+}
+
+const ordersStorageKey = () => `${ORDERS_KEY}:${currentUserKey()}`;
+
+// The old list was shared by everyone who used this browser, so remove it
+localStorage.removeItem(ORDERS_KEY);
+
 function readOrders() {
-  return readJson(ORDERS_KEY, []);
+  return readJson(ordersStorageKey(), []);
 }
 
 function saveOrders(list) {
-  localStorage.setItem(ORDERS_KEY, JSON.stringify(list));
+  localStorage.setItem(ordersStorageKey(), JSON.stringify(list));
 }
 
 function readPayments() {
