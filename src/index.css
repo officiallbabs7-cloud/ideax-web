@@ -7,3 +7,22 @@
 html {
   scroll-behavior: smooth;
 }
+
+/* iPhone Safari: make date boxes obey the width of their card */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 3rem;
+  box-sizing: border-box;
+  text-align: left;
+}
+
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+}
