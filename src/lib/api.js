@@ -506,16 +506,40 @@ export async function deleteOrder(id) {
 
 function normalizePaymentStatus(res) {
   const d = res?.data;
-  const raw =
-    (typeof d === "string" ? d : null) ??
-    pick(d, ["status", "paymentStatus", "state"]) ??
-    (typeof d === "boolean" ? (d ? "success" : "failed") : null) ??
-    (d && (d.isPaid === true || d.paid === true) ? "success" : null) ??
-    res?.message ??
-    "";
-  const s = String(raw).toLowerCase();
-  if (/success|paid|complete|confirm/.test(s)) return "success";
-  if (/fail|abandon|revers|declin|cancel/.test(s)) return "failed";
+
+  if (typeof d === "boolean") return d ? "success" : "pending";
+
+  if (
+    d &&
+    typeof d === "object" &&
+    [d.isPaid, d.paid, d.isSuccessful, d.successful, d.verified].some(
+      (v) => v === true
+    )
+  ) {
+    return "success";
+  }
+
+  // His server sends { data: { message: "Payment verified and recorded." } }
+  // with no status field, so read the status or message text.
+  const text = String(
+    (d && typeof d === "object"
+      ? pick(d, ["status", "paymentStatus", "state", "transactionStatus", "message"])
+      : d) ??
+      res?.message ??
+      ""
+  ).toLowerCase();
+
+  if (/pending|processing|not yet|awaiting/.test(text)) return "pending";
+  if (
+    /not (verified|paid|successful|complete)|unverified|unsuccessful|fail|abandon|revers|declin|cancel|reject/.test(
+      text
+    )
+  ) {
+    return "failed";
+  }
+  if (/success|paid|complete|confirm|verified|recorded|approved/.test(text)) {
+    return "success";
+  }
   return "pending";
 }
 
