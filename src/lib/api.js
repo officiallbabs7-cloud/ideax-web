@@ -978,7 +978,7 @@ export async function resetPassword({ email, token, password }) {
       email,
       token,
       newPassword: password,
-      newPasswordConfirmation: password,
+      passwordConfirmation: password,
     }),
   });
 }
