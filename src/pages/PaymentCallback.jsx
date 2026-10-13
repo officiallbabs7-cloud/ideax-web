@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import DashboardLayout from "../components/layout/DashboardLayout.jsx";
 import { verifyPayment } from "../lib/api.js";
+import { orderNumber } from "../lib/orderNumber.js";
 
 const CHECK_EVERY_MS = 4000;
 const MAX_CHECKS = 15; // about one minute
@@ -74,7 +75,7 @@ export default function PaymentCallback() {
     <dl className="mt-6 space-y-3 rounded-xl bg-gray-50 p-4 text-left text-sm">
       <div className="flex justify-between gap-4">
         <dt className="text-gray-500">Order</dt>
-        <dd className="font-semibold">{order.id}</dd>
+        <dd className="font-semibold">{orderNumber(order.id)}</dd>
       </div>
       <div className="flex justify-between gap-4">
         <dt className="text-gray-500">Service</dt>

@@ -30,6 +30,7 @@ const common = {
 
 const order = {
   ORDER_ID: "ORD-1791357162621",
+  ORDER_NUMBER: "IDX-CF9005C9",
   SERVICE: "Frontend Engineering",
   TITLE: "Website for cooking eba",
 };

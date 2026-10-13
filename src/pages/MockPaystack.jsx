@@ -2,6 +2,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import Button from "../components/ui/Button.jsx";
 import { useAuth } from "../hooks/useAuth.jsx";
+import { orderNumber } from "../lib/orderNumber.js";
 import { mockGetPaymentDetails, mockFinishPayment } from "../lib/api.js";
 
 export default function MockPaystack() {
@@ -55,7 +56,7 @@ export default function MockPaystack() {
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-gray-500">Order</dt>
-              <dd className="font-medium">{order.id}</dd>
+              <dd className="font-medium">{orderNumber(order.id)}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-gray-500">Service</dt>

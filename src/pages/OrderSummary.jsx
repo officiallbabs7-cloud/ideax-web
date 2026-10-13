@@ -5,6 +5,7 @@ import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import DashboardLayout from "../components/layout/DashboardLayout.jsx";
 import Button from "../components/ui/Button.jsx";
 import ConfirmDialog from "../components/ui/ConfirmDialog.jsx";
+import { orderNumber } from "../lib/orderNumber.js";
 import StatusBadge from "../components/features/StatusBadge.jsx";
 import {
   getOrder,
@@ -110,7 +111,7 @@ export default function OrderSummary() {
           <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 md:p-8">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-sm text-gray-500">Order {order.id}</p>
+                <p className="text-sm text-gray-500">Order {orderNumber(order.id)}</p>
                 <h1 className="mt-1 text-2xl font-extrabold">Order summary</h1>
               </div>
               <StatusBadge status={order.status} />
@@ -203,7 +204,7 @@ export default function OrderSummary() {
                 </div>
                 <p className="text-xs text-gray-500">
                   Need to cancel or change something? Contact support and quote
-                  order {order.id}. Cancellations and refunds follow our{" "}
+                  order {orderNumber(order.id)}. Cancellations and refunds follow our{" "}
                   <Link
                     to="/terms"
                     target="_blank"
