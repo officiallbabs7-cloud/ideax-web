@@ -37,15 +37,15 @@ export default function ResetPassword() {
     formState: { errors, isSubmitting },
   } = useForm({ resolver: zodResolver(schema) });
 
-  const onSubmit = async ({ password }) => {
-    setServerError("");
-    try {
-      await resetPassword({ email, token, password });
-      setDone(true);
-    } catch (err) {
-      setServerError(err?.message || "Could not reset your password.");
-    }
-  };
+  const onSubmit = async ({ password, passwordConfirmation }) => {
+  setServerError("");
+  try {
+    await resetPassword({ email, token, password, passwordConfirmation });
+    setDone(true);
+  } catch (err) {
+    setServerError(err.message || "Could not reset your password.");
+  }
+};
 
   const layoutProps = {
     prompt: "Remembered your password?",
