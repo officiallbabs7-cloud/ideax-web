@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import Logo from "../../assets/Logo2.svg";
+import Logo from "../../assets/logo.png";
 
 const linkClass = "text-violet-200 hover:text-white";
 

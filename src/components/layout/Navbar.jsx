@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Menu, X } from "lucide-react";
-import logo from "../../assets/logo.svg";
+import logo from "../../assets/logo.png";
 import useScrollSpy from "../../hooks/useScrollSpy.js";
 
 const links = [

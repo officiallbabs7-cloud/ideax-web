@@ -13,7 +13,7 @@ import {
   LogOut,
   Infinity as InfinityIcon,
 } from "lucide-react";
-import Logo2 from "../../assets/Logo2.svg";
+import Logo2 from "../../assets/logo.png";
 import { useAuth } from "../../hooks/useAuth.jsx";
 
 const nav = [

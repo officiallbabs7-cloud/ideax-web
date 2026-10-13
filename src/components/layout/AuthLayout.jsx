@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Lightbulb } from "lucide-react";
-import logo from "../../assets/logo.svg";
+import logo from "../../assets/logo.png";
 import iconCollaborate from "../../assets/icon-collaborate.svg";
 import iconImpact from "../../assets/icon-impact.svg";
 const features = [
