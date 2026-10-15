@@ -1,81 +1,30 @@
-import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Mail, User } from "lucide-react";
+import { Mail, CreditCard, KeyRound } from "lucide-react";
 import DashboardLayout from "../components/layout/DashboardLayout.jsx";
-import Input from "../components/ui/Input.jsx";
-import PasswordInput from "../components/ui/PasswordInput.jsx";
 import Button from "../components/ui/Button.jsx";
-import Switch from "../components/ui/Switch.jsx";
-import ConfirmDialog from "../components/ui/ConfirmDialog.jsx";
 import { useAuth } from "../hooks/useAuth.jsx";
-import {
-  updateProfile,
-  changePassword,
-  getEmailPreferences,
-  updateEmailPreferences,
-  deleteAccount,
-} from "../lib/api.js";
+import { forgotPassword } from "../lib/api.js";
+import { LEGAL } from "../lib/legal.js";
 
 const card = "rounded-2xl border border-gray-200 bg-white p-6 md:p-8";
-// Until the settings endpoints are connected, these are saved in this browser only
-const LOCAL_ONLY = import.meta.env.VITE_REAL_SETTINGS !== "true";
+const ready = (value) => Boolean(value) && !value.startsWith("[");
 
-function LocalNote() {
-  if (!LOCAL_ONLY) return null;
-  return (
-    <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-      Saved on this device only for now.
-    </p>
-  );
-}
+const mailto = (subject, body) =>
+  `mailto:${LEGAL.email}?subject=${encodeURIComponent(
+    subject
+  )}&body=${encodeURIComponent(body)}`;
 
-/* ---------- Profile ---------- */
-const profileSchema = z.object({
-  name: z.string().min(2, "Enter your full name"),
-  email: z.string().email("Enter a valid email address"),
-});
-
+/* ---------- Profile (read only) ---------- */
 function ProfileCard() {
-  const { user, updateUser } = useAuth();
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors, isSubmitting, isDirty },
-  } = useForm({
-    resolver: zodResolver(profileSchema),
-    defaultValues: { name: user?.name || "", email: user?.email || "" },
-  });
-
-  const onSubmit = async (data) => {
-    try {
-      const res = await updateProfile(data);
-      updateUser(res.user);
-      reset({ name: res.user.name, email: res.user.email });
-      toast.success("Profile updated.");
-    } catch (err) {
-      toast.error(err?.message || "Could not update your profile.");
-    }
-  };
-
+  const { user } = useAuth();
   const initial = user?.name?.charAt(0)?.toUpperCase() || "U";
 
   return (
     <section className={card}>
       <h2 className="text-lg font-bold">Profile</h2>
-      <p className="mt-1 text-sm text-gray-500">
-        Your name and the email we use to sign you in.
-      </p>
-
-      <LocalNote />
-      <p className="mt-1 text-sm text-gray-500">
-        Your name and the email we use to sign you in.
-      </p>
-      <LocalNote />
+      <p className="mt-1 text-sm text-gray-500">The details on your account.</p>
 
       <div className="mt-5 flex items-center gap-4">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand text-2xl font-bold text-white">
@@ -87,236 +36,139 @@ function ProfileCard() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="mt-5">
-        <div className="grid gap-4 md:grid-cols-2">
-          <Input
-            label="Full name"
-            icon={User}
-            {...register("name")}
-            error={errors.name?.message}
-          />
-          <Input
-            label="Email address"
-            type="email"
-            icon={Mail}
-            hint="Your sign-in email can't be changed here yet."
-            readOnly
-            className="bg-gray-50 text-gray-500"
-            {...register("email")}
-            error={errors.email?.message}
-          />
-        </div>
-        <div className="mt-5 flex justify-end">
-          <Button type="submit" loading={isSubmitting} disabled={!isDirty}>
-            Save changes
-          </Button>
-        </div>
-      </form>
+      <p className="mt-5 text-sm text-gray-600">
+        Need to change your name or sign-in email?{" "}
+        {ready(LEGAL.email) ? (
+          <a
+            href={mailto(
+              "Change my IdeaX account details",
+              `Hello, please update my account (${user?.email}).\n\nWhat I'd like changed:\n`
+            )}
+            className="font-semibold text-brand hover:underline"
+          >
+            Email support
+          </a>
+        ) : (
+          "Please contact support."
+        )}
+      </p>
     </section>
   );
 }
 
-/* ---------- Password ---------- */
-const passwordSchema = z
-  .object({
-    current: z.string().min(1, "Enter your current password"),
-    next: z.string().min(8, "Password must be at least 8 characters"),
-    confirm: z.string().min(1, "Confirm your new password"),
-  })
-  .refine((d) => d.next === d.confirm, {
-    message: "Passwords do not match",
-    path: ["confirm"],
-  })
-  .refine((d) => d.next !== d.current, {
-    message: "Choose a password different from your current one",
-    path: ["next"],
-  });
-
+/* ---------- Password: sends the real reset link ---------- */
 function PasswordCard() {
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm({ resolver: zodResolver(passwordSchema) });
+  const { user } = useAuth();
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const timer = useRef(null);
 
-  const onSubmit = async (data) => {
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const send = async () => {
+    if (!user?.email) return;
+    setSending(true);
     try {
-      await changePassword({
-        currentPassword: data.current,
-        newPassword: data.next,
-      });
-      reset();
-      toast.success("Your password has been updated.");
+      await forgotPassword(user.email);
+      setSent(true);
+      toast.success(`We've sent a reset link to ${user.email}.`);
+      // Allow another email after a minute
+      timer.current = setTimeout(() => setSent(false), 60000);
     } catch (err) {
-      toast.error(err?.message || "Could not update your password.");
+      toast.error(err?.message || "Could not send the email. Please try again.");
+    } finally {
+      setSending(false);
     }
   };
 
   return (
     <section className={card}>
-      <h2 className="text-lg font-bold">Password</h2>
-      <p className="mt-1 text-sm text-gray-500">
-        Choose a password you don't use anywhere else.
-      </p>
+      <div className="flex items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
+          <KeyRound size={20} />
+        </span>
+        <div>
+          <h2 className="text-lg font-bold">Password</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            To change your password, we'll email a secure link to{" "}
+            <span className="font-semibold text-gray-700">{user?.email}</span>.
+            The link works for 1 hour. Check your spam folder if you don't see
+            it.
+          </p>
+        </div>
+      </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="mt-5 space-y-4">
-        <PasswordInput
-          label="Current password"
-          placeholder="Enter your current password"
-          {...register("current")}
-          error={errors.current?.message}
-        />
-        <div className="grid gap-4 md:grid-cols-2">
-          <PasswordInput
-            label="New password"
-            placeholder="Create a new password"
-            hint="At least 8 characters long."
-            {...register("next")}
-            error={errors.next?.message}
-          />
-          <PasswordInput
-            label="Confirm new password"
-            placeholder="Repeat the new password"
-            {...register("confirm")}
-            error={errors.confirm?.message}
-          />
-        </div>
-        <div className="flex justify-end">
-          <Button type="submit" loading={isSubmitting}>
-            Update password
-          </Button>
-        </div>
-      </form>
+      <div className="mt-5 flex justify-end">
+        <Button onClick={send} loading={sending} disabled={sent}>
+          {sent ? "Link sent. Check your inbox" : "Email me a reset link"}
+        </Button>
+      </div>
     </section>
   );
 }
 
-/* ---------- Email notifications ---------- */
-const emailRows = [
+/* ---------- Emails we really send ---------- */
+const emails = [
   {
-    key: "orderUpdates",
-    label: "Order updates",
-    text: "When your request is submitted, starts or is completed.",
+    icon: Mail,
+    label: "Request received",
+    text: "Sent when you submit a request, with a link to review and pay.",
   },
   {
-    key: "payments",
-    label: "Payment confirmations",
-    text: "Receipts and payment status. These are always sent.",
-    locked: true,
+    icon: CreditCard,
+    label: "Payment confirmation",
+    text: "Your receipt, sent once your payment goes through.",
   },
   {
-    key: "deadlineReminders",
-    label: "Deadline reminders",
-    text: "A reminder 3 days before your preferred deadline.",
+    icon: KeyRound,
+    label: "Password reset",
+    text: "Sent only when you ask for a reset link.",
   },
 ];
 
 function EmailCard() {
-  const [prefs, setPrefs] = useState(null);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-    getEmailPreferences()
-      .then((res) => {
-        if (!cancelled) setPrefs(res.preferences);
-      })
-      .catch((err) => {
-        if (!cancelled)
-          setError(err?.message || "Could not load your preferences.");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const toggle = async (key, value) => {
-    const previous = prefs;
-    const next = { ...prefs, [key]: value };
-    setPrefs(next);
-    try {
-      await updateEmailPreferences(next);
-      toast.success("Preference saved.");
-    } catch (err) {
-      setPrefs(previous);
-      toast.error(err?.message || "Could not save your preference.");
-    }
-  };
+  const { user } = useAuth();
 
   return (
     <section className={card}>
-      <h2 className="text-lg font-bold">Email notifications</h2>
+      <h2 className="text-lg font-bold">Emails you'll get from IdeaX</h2>
       <p className="mt-1 text-sm text-gray-500">
-        Choose which emails you get from IdeaX.
+        We send these to {user?.email}. We don't send marketing emails.
       </p>
-      <LocalNote />
-      <p className="mt-1 text-sm text-gray-500">
-        Choose which emails you get from IdeaX.
-      </p>
-      <LocalNote />
 
-      {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
-      {!prefs && !error && (
-        <div className="mt-4 h-40 animate-pulse rounded-xl bg-gray-100" />
-      )}
-
-      {prefs && (
-        <div className="mt-3">
-          {emailRows.map((row, i) => (
-            <div
-              key={row.key}
-              className={`flex items-center gap-4 py-4 ${
-                i > 0 ? "border-t border-gray-100" : ""
-              }`}
-            >
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold">{row.label}</p>
-                <p className="mt-0.5 text-sm text-gray-500">{row.text}</p>
-              </div>
-              <Switch
-                label={row.label}
-                checked={row.locked ? true : prefs[row.key]}
-                disabled={row.locked}
-                onChange={(value) => toggle(row.key, value)}
-              />
+      <div className="mt-3">
+        {emails.map(({ icon: Icon, label, text }, i) => (
+          <div
+            key={label}
+            className={`flex items-center gap-4 py-4 ${
+              i > 0 ? "border-t border-gray-100" : ""
+            }`}
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
+              <Icon size={20} />
+            </span>
+            <div className="min-w-0">
+              <p className="font-semibold">{label}</p>
+              <p className="mt-0.5 text-sm text-gray-500">{text}</p>
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
 
-/* ---------- Delete account ---------- */
+/* ---------- Delete account: handled by support ---------- */
 function DeleteCard() {
-  const [open, setOpen] = useState(false);
-  const [typed, setTyped] = useState("");
-  const [deleting, setDeleting] = useState(false);
-
-  const close = () => {
-    setOpen(false);
-    setTyped("");
-  };
-
-  const handleDelete = async () => {
-    setDeleting(true);
-    try {
-      await deleteAccount();
-      // A full reload clears everything from memory and signs the user out
-      window.location.assign("/");
-    } catch (err) {
-      toast.error(err?.message || "Could not delete your account.");
-      setDeleting(false);
-    }
-  };
+  const { user } = useAuth();
 
   return (
     <section className="rounded-2xl border border-red-200 bg-white p-6 md:p-8">
       <h2 className="text-lg font-bold text-red-700">Delete account</h2>
       <p className="mt-1 text-sm text-gray-600">
-        Permanently delete your account and personal details. Order and payment
-        records are kept for accounting, as explained in our{" "}
+        To delete your account and personal details, email us from your sign-in
+        address and we'll process it. Order and payment records are kept for
+        accounting, as explained in our{" "}
         <Link
           to="/privacy"
           target="_blank"
@@ -327,34 +179,22 @@ function DeleteCard() {
         </Link>
         .
       </p>
-      <button
-        onClick={() => setOpen(true)}
-        className="mt-4 rounded-lg border border-red-600 px-5 py-3 text-sm font-semibold text-red-600 hover:bg-red-50"
-      >
-        Delete account
-      </button>
 
-      <ConfirmDialog
-        open={open}
-        title="Delete your account?"
-        message="This permanently deletes your account and personal details, and it can't be undone. Order and payment records are kept for accounting."
-        confirmText="Delete my account"
-        cancelText="Keep my account"
-        loading={deleting}
-        confirmDisabled={typed.trim() !== "DELETE"}
-        onConfirm={handleDelete}
-        onCancel={close}
-      >
-        <label className="mt-4 block text-sm font-semibold">
-          Type <span className="font-bold">DELETE</span> to confirm
-          <input
-            value={typed}
-            onChange={(e) => setTyped(e.target.value)}
-            autoComplete="off"
-            className="mt-1 w-full rounded-lg border border-gray-300 px-4 py-3 font-normal outline-none focus:ring-2 focus:ring-brand"
-          />
-        </label>
-      </ConfirmDialog>
+      {ready(LEGAL.email) ? (
+        <a
+          href={mailto(
+            "Delete my IdeaX account",
+            `Hello, please delete my IdeaX account (${user?.email}) and my personal details.`
+          )}
+          className="mt-4 inline-block rounded-lg border border-red-600 px-5 py-3 text-sm font-semibold text-red-600 hover:bg-red-50"
+        >
+          Email support to delete my account
+        </a>
+      ) : (
+        <p className="mt-4 text-sm text-gray-500">
+          Contact details coming soon.
+        </p>
+      )}
     </section>
   );
 }

@@ -1,7 +1,7 @@
 export const LEGAL = {
   brand: "IdeaX",
   company: "IDEAX",
-  email: "Ideax@wemabank.com",
+  email: "Ideax.419@wemabank.com",
   address: "54 Marina, Lagos, Nigeria",
   lastUpdated: "6 October 2026",
   refundDays: "10",
