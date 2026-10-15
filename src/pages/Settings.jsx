@@ -46,7 +46,7 @@ function ProfileCard() {
             )}
             className="font-semibold text-brand hover:underline"
           >
-            Email support
+           Ideax.419@gmail.com
           </a>
         ) : (
           "Please contact support."
