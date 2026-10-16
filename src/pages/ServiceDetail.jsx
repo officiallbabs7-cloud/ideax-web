@@ -178,7 +178,7 @@ export default function ServiceDetail() {
                   error={errors.description?.message}
                 />
                 <Input
-                  label="Preferred deadline (optional)"
+                  label="Preferred deadline"
                   type="date"
                   min={todayString()}
                   {...register("deadline")}
